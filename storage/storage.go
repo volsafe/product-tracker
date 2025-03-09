@@ -1,92 +1,83 @@
 package storage
 
 import (
-	"context"
-	"database/sql"
-	"profile/db"
+    "context"
+    "fmt"
+    "product-tracker/db"
+    _ "github.com/lib/pq"
 )
 
-const columns = "user_id, phone_number, latitude, longitude, home_size, building_floors, floor_living_on, window_model, adults_count, children_count, electricity_company, meter_type, bill_number"
+const columns = "name, quantity, energy_consumed, date"
 
-type Profile struct {
-	UserID             uint
-	PhoneNumber        string
-	Latitude           float64
-	Longitude          float64
-	HomeSize           float64
-	BuildingFloors     int
-	FloorLivingOn      int
-	WindowModel        string
-	AdultsCount        int
-	ChildrenCount      int
-	ElectricityCompany string
-	MeterType          string
-	BillNumber         string
+type Product struct {
+    Name           string  `json:"name"`
+    Quantity       int     `json:"quantity"`
+    EnergyConsumed float64 `json:"energy_consumed"`
+    Date           string  `json:"date"`
 }
 
 type Storage struct {
-	db *db.DB
+    db *db.DB
 }
 
 func (s *Storage) Close() error {
-	if s.db != nil {
-		s.db.Close()
-	}
-	return nil
+    if s.db != nil {
+        s.db.Close()
+        return nil
+    }
+    return nil
 }
 
 func NewStorage() (*Storage, error) {
-	dbConn, err := db.NewDB()
-	if err != nil {
-		return nil, err
-	}
-	return &Storage{db: dbConn}, nil
+    dbConn, err := db.NewDB()
+    if err != nil {
+        return nil, fmt.Errorf("failed to connect to the database: %w", err)
+    }
+    return &Storage{db: dbConn}, nil
 }
 
-func (s *Storage) CreateUserProfile(ctx context.Context, p Profile) error {
-	query := `INSERT INTO profiles (` + columns + `)
-              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`
-	_, err := s.db.DB.ExecContext(ctx, query, p.UserID, p.PhoneNumber, p.Latitude, p.Longitude, p.HomeSize, p.BuildingFloors, p.FloorLivingOn, p.WindowModel, p.AdultsCount, p.ChildrenCount, p.ElectricityCompany, p.MeterType, p.BillNumber)
-	if err != nil {
-		return err
-	}
+func (s *Storage) InsertProduct(ctx context.Context, p Product) error {
+    query := `INSERT INTO product_tracker (` + columns + `) VALUES ($1, $2, $3, $4)`
+    stmt, err := s.db.DB.PrepareContext(ctx, query)
+    if err != nil {
+        return fmt.Errorf("failed to prepare insert statement: %w", err)
+    }
+    defer stmt.Close()
 
-	return nil
+    _, err = stmt.ExecContext(ctx, p.Name, p.Quantity, p.EnergyConsumed, p.Date)
+    if err != nil {
+        return fmt.Errorf("failed to execute insert statement: %w", err)
+    }
+
+    return nil
 }
 
-func (s *Storage) GetUserProfile(ctx context.Context, userID uint) (*Profile, error) {
-	var p Profile
-	query := "SELECT " + columns + " FROM profiles WHERE user_id = $1"
+func (s *Storage) GetProductsByName(ctx context.Context, name string) ([]Product, error) {
+    query := "SELECT " + columns + " FROM product_tracker WHERE name = $1"
+    stmt, err := s.db.DB.PrepareContext(ctx, query)
+    if err != nil {
+        return nil, fmt.Errorf("failed to prepare select statement: %w", err)
+    }
+    defer stmt.Close()
 
-	row := s.db.DB.QueryRowContext(ctx, query, userID)
-	err := row.Scan(&p.UserID, &p.PhoneNumber, &p.Latitude, &p.Longitude, &p.HomeSize, &p.BuildingFloors, &p.FloorLivingOn, &p.WindowModel, &p.AdultsCount, &p.ChildrenCount, &p.ElectricityCompany, &p.MeterType, &p.BillNumber)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
-		return nil, err
-	}
+    rows, err := stmt.QueryContext(ctx, name)
+    if err != nil {
+        return nil, fmt.Errorf("failed to execute select statement: %w", err)
+    }
+    defer rows.Close()
 
-	return &p, nil
-}
+    var products []Product
+    for rows.Next() {
+        var p Product
+        if err := rows.Scan(&p.Name, &p.Quantity, &p.EnergyConsumed, &p.Date); err != nil {
+            return nil, fmt.Errorf("failed to scan row: %w", err)
+        }
+        products = append(products, p)
+    }
 
-func (s *Storage) UpdateUserProfileByID(ctx context.Context, p Profile) error {
-	query := `UPDATE profiles SET phone_number = $1, latitude = $2, longitude = $3, home_size = $4, building_floors = $5, floor_living_on = $6, window_model = $7, adults_count = $8, children_count = $9, electricity_company = $10, meter_type = $11, bill_number = $12
-              WHERE user_id = $13`
-	_, err := s.db.DB.ExecContext(ctx, query, p.PhoneNumber, p.Latitude, p.Longitude, p.HomeSize, p.BuildingFloors, p.FloorLivingOn, p.WindowModel, p.AdultsCount, p.ChildrenCount, p.ElectricityCompany, p.MeterType, p.BillNumber, p.UserID)
-	if err != nil {
-		return err
-	}
+    if err := rows.Err(); err != nil {
+        return nil, fmt.Errorf("rows iteration error: %w", err)
+    }
 
-	return nil
-}
-
-func (s *Storage) DeleteUserProfile(ctx context.Context, userID uint) error {
-	query := `DELETE FROM profiles WHERE user_id = $1`
-	_, err := s.db.DB.ExecContext(ctx, query, userID)
-	if err != nil {
-		return err
-	}
-
-	return nil
+    return products, nil
 }

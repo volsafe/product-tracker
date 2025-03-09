@@ -1,8 +1,8 @@
 package routes
 
 import (
-	"profile/handlers"
-	"profile/middlewares"
+	"product-tracker/handlers"
+	"product-tracker/middlewares"
 
 	"github.com/gin-gonic/gin"
 )
@@ -10,13 +10,11 @@ import (
 func SetupRouter() *gin.Engine {
 	r := gin.Default()
 
-	auth := r.Group("/profile")
-	auth.Use(middlewares.AuthMiddleware())
+	product := r.Group("/product")
+	product.Use(middlewares.AuthMiddleware())
 	{
-		auth.POST("/create", handlers.CreateProfile)
-		auth.GET("/:userID", handlers.GetProfile)
-		auth.PUT("/update", handlers.UpdateProfile)
-		auth.DELETE("/delete/:userID", handlers.DeleteProfile)
+		product.POST("/insert", handlers.ImportProduct)
+		product.GET("/list/:name", handlers.GetProductsByName)
 	}
 	
 	r.GET("/health", handlers.HealthCheck)

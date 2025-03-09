@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"profile/controllers"
+	"product-tracker/controllers"
 	"github.com/gin-gonic/gin"
 
 )

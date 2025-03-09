@@ -2,7 +2,7 @@ package controllers
 
 import (
 	"context"
-	"profile/db"
+	"product-tracker/db"
 )
 
 func HealthCheck(c context.Context) error {

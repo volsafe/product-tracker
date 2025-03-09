@@ -2,7 +2,7 @@ package utils
 
 import (
 	"errors"
-	"profile/config"
+	"product-tracker/config"
 
 	"github.com/golang-jwt/jwt"
 )

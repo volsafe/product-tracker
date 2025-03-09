@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"profile/config"
+	"product-tracker/config"
 	"time"
 	"context"
 	_ "github.com/lib/pq"

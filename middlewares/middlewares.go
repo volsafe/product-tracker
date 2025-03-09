@@ -2,7 +2,7 @@ package middlewares
 
 import (
     "net/http"
-    "profile/utils"
+    "product-tracker/utils"
     "strings"
 
     "github.com/gin-gonic/gin"

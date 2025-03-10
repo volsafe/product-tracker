@@ -58,4 +58,13 @@ func GetProductsByName(c *gin.Context) {
 	c.JSON(200, products)
 }
 
+func GetProducts(c *gin.Context) {
+	products, err := controllers.GetProducts(c)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error(),})
+		return
+	}
+	c.JSON(200, products)
+}
+
 

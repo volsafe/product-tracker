@@ -14,6 +14,7 @@ func SetupRouter() *gin.Engine {
 	product.Use(middlewares.AuthMiddleware())
 	{
 		product.POST("/insert", handlers.ImportProduct)
+		product.POST("/list", handlers.GetProducts)
 		product.GET("/list/:name", handlers.GetProductsByName)
 	}
 	

@@ -81,3 +81,33 @@ func (s *Storage) GetProductsByName(ctx context.Context, name string) ([]Product
 
     return products, nil
 }
+
+func (s *Storage) GetProducts(ctx context.Context) ([]Product, error) {
+	query := "SELECT " + columns + " FROM product_tracker"
+	stmt, err := s.db.DB.PrepareContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to prepare select statement: %w", err)
+	}
+	defer stmt.Close()
+
+	rows, err := stmt.QueryContext(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute select statement: %w", err)
+	}
+	defer rows.Close()
+
+	var products []Product
+	for rows.Next() {
+		var p Product
+		if err := rows.Scan(&p.Name, &p.Quantity, &p.EnergyConsumed, &p.Date); err != nil {
+			return nil, fmt.Errorf("failed to scan row: %w", err)
+		}
+		products = append(products, p)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows iteration error: %w", err)
+	}
+
+	return products, nil
+}

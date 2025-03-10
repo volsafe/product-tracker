@@ -52,3 +52,20 @@ func GetProductsByName(c context.Context, name string) ([]Product, error) {
 	}
 	return p, nil
 }
+
+func GetProducts(c context.Context) ([]Product, error) {
+	products, err := S.GetProducts(c)
+	if err != nil {
+		return nil, err
+	}
+	var p []Product
+	for _, product := range products {
+		p = append(p, Product{
+			Name: product.Name,
+			Quantity: product.Quantity,
+			EnergyConsumed: product.EnergyConsumed,
+			Date: product.Date,
+		})
+	}
+	return p, nil
+}

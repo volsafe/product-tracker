@@ -1,28 +1,35 @@
-# Product Tracker
+# Product Tracker API
 
-Product Tracker is a Go-based application that allows you to track products in a database. It supports inserting new products and fetching products by name.
+A RESTful API for tracking products and their energy consumption, built with Go, Gin, and PostgreSQL.
 
-## Table of Contents
+## Features
 
-- [Installation](#installation)
-- [Usage](#usage)
-- [API](#api)
-- [Contributing](#contributing)
-- [License](#license)
+- RESTful API endpoints for product management
+- JWT-based authentication
+- PostgreSQL database integration
+- Swagger API documentation
+- Configuration management with YAML support
+- Health check endpoint
+
+## Prerequisites
+
+- Go 1.16 or higher
+- PostgreSQL 12 or higher
+- Make (optional, for using Makefile commands)
 
 ## Installation
 
 1. Clone the repository:
 
     ```sh
-    git clone https://github.com/yourusername/product-tracker.git
+    git clone https://github.com/volsafe/product-tracker.git
     cd product-tracker
     ```
 
 2. Install dependencies:
 
     ```sh
-    go mod tidy
+    go mod download
     ```
 
 3. Set up the database:
@@ -30,87 +37,133 @@ Product Tracker is a Go-based application that allows you to track products in a
     Ensure you have PostgreSQL installed and running. Create a database and a table with the following structure:
 
     ```sql
-    CREATE TABLE product_tracker (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        quantity INT NOT NULL,
-        energy_consumed FLOAT NOT NULL,
-        date DATE NOT NULL
-    );
+    CREATE DATABASE consumers;
+    CREATE USER pgsql WITH PASSWORD 'pgsql';
+    GRANT ALL PRIVILEGES ON DATABASE consumers TO pgsql;
     ```
 
-4. Configure the database connection:
+4. Configure the application:
+   - Copy `config/config.yaml.example` to `config/config.yaml`
+   - Update the configuration values in `config/config.yaml`
 
-    Update the `db` package to include your database connection details.
+## Configuration
 
-## Usage
+The application can be configured through:
+1. `config/config.yaml` file
+2. Environment variables (override YAML settings)
 
-1. Run the application:
+### Configuration File Structure
+
+```yaml
+Server:
+  Port: 8080
+  ReadTimeout: 10s
+  WriteTimeout: 10s
+  IdleTimeout: 120s
+  MaxHeaderBytes: 1048576
+
+Database:
+  Host: "localhost"
+  Port: 5432
+  User: "pgsql"
+  Password: "pgsql"
+  DbName: "consumers"
+  SSLMode: "disable"
+
+JWT:
+  Secret: "your-secret-key"
+  ExpirationTime: 24h
+```
+
+### Environment Variables
+
+- `SERVER_PORT`: Server port (default: 8080)
+- `DB_HOST`: Database host (default: localhost)
+- `DB_PORT`: Database port (default: 5432)
+- `DB_USER`: Database user (default: pgsql)
+- `DB_PASSWORD`: Database password (default: pgsql)
+- `DB_NAME`: Database name (default: consumers)
+- `DB_SSL_MODE`: Database SSL mode (default: disable)
+- `JWT_SECRET`: JWT secret key
+
+## Running the Application
+
+1. Start the server:
 
     ```sh
-    go run main.go
+    go run cmd/main.go
     ```
 
-2. Use the provided API endpoints to interact with the application.
+2. Access the API:
+   - API Base URL: `http://localhost:8080/api/v1`
+   - Swagger Documentation: `http://localhost:8080/swagger/index.html`
+   - Health Check: `http://localhost:8080/health`
 
-## API
+## API Endpoints
 
-### Insert Product
+### Products
 
-- **Endpoint**: `/insert`
-- **Method**: `POST`
-- **Request Body**:
+- `POST /api/v1/product/insert`: Import a new product
+- `GET /api/v1/product/list`: List all products
+- `GET /api/v1/product/list/{name}`: Get products by name
 
-    ```json
-    {
-        "name": "Product Name",
-        "quantity": 10,
-        "energy_consumed": 100.5,
-        "date": "2025-03-10"
-    }
-    ```
+### Health Check
 
-- **Response**:
+- `GET /health`: Check API health status
 
-    ```json
-    {
-        "message": "Product inserted successfully"
-    }
-    ```
+## Authentication
 
-### Get Products by Name
+The API uses JWT (JSON Web Tokens) for authentication. Include the token in the Authorization header:
 
-- **Endpoint**: `/products`
-- **Method**: `GET`
-- **Query Parameters**:
+```
+Authorization: Bearer <your-token>
+```
 
-    - `name`: The name of the product to fetch.
+## Development
 
-- **Response**:
+### Project Structure
 
-    ```json
-    [
-        {
-            "name": "Product Name",
-            "quantity": 10,
-            "energy_consumed": 100.5,
-            "date": "2025-03-10"
-        },
-        ...
-    ]
-    ```
+```
+product-tracker/
+├── cmd/
+│   └── main.go           # Application entry point
+├── config/
+│   ├── config.go         # Configuration management
+│   └── config.yaml       # Configuration file
+├── controllers/
+│   └── health.go         # Health check controller
+├── db/
+│   └── db.go            # Database connection management
+├── handlers/
+│   ├── health.go        # Health check handler
+│   └── products.go      # Product handlers
+├── models/
+│   └── product.go       # Product model
+├── routes/
+│   └── routes.go        # Route definitions
+├── storage/
+│   └── storage.go       # Database operations
+├── utils/
+│   └── jwt.go          # JWT utilities
+└── docs/               # Swagger documentation
+```
+
+### Adding New Features
+
+1. Create new models in the `models` package
+2. Add database operations in the `storage` package
+3. Create handlers in the `handlers` package
+4. Define routes in `routes/routes.go`
+5. Update Swagger documentation
 
 ## Contributing
 
-Contributions are welcome! Please open an issue or submit a pull request for any changes.
-
-1. Fork the repository.
-2. Create a new branch (`git checkout -b feature-branch`).
-3. Make your changes.
-4. Commit your changes (`git commit -am 'Add new feature'`).
-5. Push to the branch (`git push origin feature-branch`).
-6. Open a pull request.
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the LICENSE file for details.

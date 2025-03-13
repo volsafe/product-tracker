@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"net/http"
+	"product-tracker/config"
+	"product-tracker/models"
 	"product-tracker/storage"
 
 	"github.com/gin-gonic/gin"
@@ -10,10 +12,10 @@ import (
 // Product represents the product request/response structure
 // @Description Product information
 type Product struct {
-	Name           string  `json:"name" example:"Product A" binding:"required"`
-	Quantity       int     `json:"quantity" example:"100" binding:"required,min=0"`
-	EnergyConsumed float64 `json:"energy_consumed" example:"50.5" binding:"required,min=0"`
-	Date           string  `json:"date" example:"2024-03-10" binding:"required,datetime=2006-01-02"`
+	Name              string  `json:"name" example:"Product A" binding:"required"`
+	Description       string  `json:"description" example:"Product description"`
+	Price             float64 `json:"price" example:"99.99" binding:"required,min=0"`
+	EnergyConsumption float64 `json:"energy_consumption" example:"50.5" binding:"required,min=0"`
 }
 
 // ImportProduct godoc
@@ -36,14 +38,20 @@ func ImportProduct(c *gin.Context) {
 		return
 	}
 
-	storageInstance, err := storage.NewStorage()
+	cfg := config.GetConfig()
+	storageInstance, err := storage.NewStorage(cfg)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to connect to database"})
 		return
 	}
 	defer storageInstance.Close()
 
-	if err := storageInstance.InsertProduct(c.Request.Context(), storage.Product(product)); err != nil {
+	if err := storageInstance.InsertProduct(c.Request.Context(), &models.Product{
+		Name:              product.Name,
+		Description:       product.Description,
+		Price:             product.Price,
+		EnergyConsumption: product.EnergyConsumption,
+	}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -62,7 +70,8 @@ func ImportProduct(c *gin.Context) {
 // @Router       /product/list [get]
 // @Security     BearerAuth
 func GetProducts(c *gin.Context) {
-	storageInstance, err := storage.NewStorage()
+	cfg := config.GetConfig()
+	storageInstance, err := storage.NewStorage(cfg)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to connect to database"})
 		return
@@ -96,7 +105,8 @@ func GetProductsByName(c *gin.Context) {
 		return
 	}
 
-	storageInstance, err := storage.NewStorage()
+	cfg := config.GetConfig()
+	storageInstance, err := storage.NewStorage(cfg)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to connect to database"})
 		return

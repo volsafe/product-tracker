@@ -2,21 +2,25 @@ package controllers
 
 import (
 	"context"
-	"product-tracker/db"
 	"product-tracker/config"
+	"product-tracker/db"
 )
 
 func HealthCheck(c context.Context) error {
-    cfg := config.GetConfig()
-    dbConn, err := db.NewDB(cfg.GetDSN(), cfg.Database.MaxConns, cfg.Database.MaxIdle, cfg.Database.Timeout)
-    if err != nil {
-        return err
-    }
-    defer dbConn.Close()
+	cfg := config.GetConfig()
+	dbConfig := &db.DBConfig{
+		Host:     cfg.Database.Host,
+		Port:     cfg.Database.Port,
+		User:     cfg.Database.User,
+		Password: cfg.Database.Password,
+		DbName:   cfg.Database.DbName,
+	}
 
-    err = dbConn.Ping(c)
-    if err != nil {
+	dbConn, err := db.NewDB(dbConfig)
+	if err != nil {
 		return err
 	}
-	return nil
+	defer dbConn.Close()
+
+	return dbConn.Ping()
 }

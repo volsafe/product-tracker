@@ -98,7 +98,7 @@ func ValidateToken(tokenString string) (*TokenClaims, error) {
 		return nil, ErrConfigNotLoaded
 	}
 
-	secretKey := c.Jwt.Secret
+	secretKey := c.JWT.Secret
 	if secretKey == "" {
 		return nil, ErrJWTSecretNotFound
 	}
@@ -143,7 +143,7 @@ func GenerateToken(userID uint, opts TokenOptions) (string, error) {
 		return "", ErrConfigNotLoaded
 	}
 
-	secretKey := c.Jwt.Secret
+	secretKey := c.JWT.Secret
 	if secretKey == "" {
 		return "", ErrJWTSecretNotFound
 	}

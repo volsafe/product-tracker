@@ -3,126 +3,104 @@ package config
 import (
 	"fmt"
 	"log"
+	"os"
 	"time"
 
-	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
 )
+
+var cfg *Config
 
 // Config represents the application configuration
 type Config struct {
-	Database struct {
-		Host     string        `json:"host" validate:"required"`
-		Port     string        `json:"port" validate:"required"`
-		User     string        `json:"user" validate:"required"`
-		Password string        `json:"password" validate:"required"`
-		DbName   string        `json:"dbname" validate:"required"`
-		SSLMode  string        `json:"sslmode" default:"disable"`
-		MaxConns int           `json:"max_conns" default:"10"`
-		MaxIdle  int           `json:"max_idle" default:"5"`
-		Timeout  time.Duration `json:"timeout" default:"5s"`
-	} `json:"database"`
-	Jwt struct {
-		Secret         string        `json:"secret" validate:"required"`
-		ExpirationTime time.Duration `json:"expiration_time" default:"24h"`
-		RefreshTime    time.Duration `json:"refresh_time" default:"168h"`
-		Issuer         string        `json:"issuer" default:"product-tracker"`
-		Audience       string        `json:"audience" default:"product-tracker-api"`
-	} `json:"jwt"`
-	Server struct {
-		Port           string        `json:"port" validate:"required"`
-		ReadTimeout    time.Duration `json:"read_timeout" default:"5s"`
-		WriteTimeout   time.Duration `json:"write_timeout" default:"10s"`
-		IdleTimeout    time.Duration `json:"idle_timeout" default:"120s"`
-		MaxHeaderBytes int           `json:"max_header_bytes" default:"1048576"`
-	} `json:"server"`
+	Server   ServerConfig   `yaml:"server" json:"server"`
+	Database DatabaseConfig `yaml:"database" json:"database"`
+	JWT      JWTConfig      `yaml:"jwt" json:"jwt"`
 }
 
-var (
-	configInstance *Config
-	configLoaded   bool
-)
+// ServerConfig represents the server configuration
+type ServerConfig struct {
+	Port           string        `yaml:"port" json:"port"`
+	ReadTimeout    time.Duration `yaml:"read_timeout" json:"read_timeout"`
+	WriteTimeout   time.Duration `yaml:"write_timeout" json:"write_timeout"`
+	IdleTimeout    time.Duration `yaml:"idle_timeout" json:"idle_timeout"`
+	MaxHeaderBytes int           `yaml:"max_header_bytes" json:"max_header_bytes"`
+}
 
-// LoadConfig loads and validates the configuration
-func LoadConfig() error {
-	if configLoaded {
-		return nil
+// DatabaseConfig represents the database configuration
+type DatabaseConfig struct {
+	Host     string `yaml:"host" json:"host"`
+	Port     string `yaml:"port" json:"port"`
+	User     string `yaml:"user" json:"user"`
+	Password string `yaml:"password" json:"password"`
+	DbName   string `yaml:"dbname" json:"dbname"`
+	SSLMode  string `yaml:"sslmode" json:"sslmode"`
+}
+
+// JWTConfig represents the JWT configuration
+type JWTConfig struct {
+	Secret         string        `yaml:"secret" json:"secret"`
+	ExpirationTime time.Duration `yaml:"expiration_time" json:"expiration_time"`
+}
+
+// LoadConfig loads the configuration from config.yml and environment variables
+func LoadConfig() (*Config, error) {
+	// Default configuration
+	cfg = &Config{
+		Server: ServerConfig{
+			Port:           "8080",
+			ReadTimeout:    10 * time.Second,
+			WriteTimeout:   10 * time.Second,
+			IdleTimeout:    120 * time.Second,
+			MaxHeaderBytes: 1 << 20, // 1MB
+		},
+		Database: DatabaseConfig{
+			Host:     "localhost",
+			Port:     "5432",
+			User:     "pgsql",
+			Password: "pgsql",
+			DbName:   "consumers",
+			SSLMode:  "disable",
+		},
+		JWT: JWTConfig{
+			Secret:         "your-secret-key",
+			ExpirationTime: 24 * time.Hour,
+		},
 	}
 
-	viper.AddConfigPath("./config")
-	viper.SetConfigName("config")
-	viper.SetConfigType("yaml")
-	viper.AutomaticEnv()
-
-	// Set defaults
-	viper.SetDefault("database.sslmode", "disable")
-	viper.SetDefault("database.max_conns", 10)
-	viper.SetDefault("database.max_idle", 5)
-	viper.SetDefault("database.timeout", "5s")
-	viper.SetDefault("jwt.expiration_time", "24h")
-	viper.SetDefault("jwt.refresh_time", "168h")
-	viper.SetDefault("jwt.issuer", "product-tracker")
-	viper.SetDefault("jwt.audience", "product-tracker-api")
-	viper.SetDefault("server.read_timeout", "5s")
-	viper.SetDefault("server.write_timeout", "10s")
-	viper.SetDefault("server.idle_timeout", "120s")
-	viper.SetDefault("server.max_header_bytes", 1048576)
-
-	if err := viper.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			log.Printf("Warning: Config file not found, using environment variables and defaults")
-		} else {
-			return fmt.Errorf("error reading config file: %w", err)
+	// Try to read config.yaml from the config directory
+	if data, err := os.ReadFile("config/config.yaml"); err == nil {
+		if err := yaml.Unmarshal(data, cfg); err != nil {
+			log.Printf("Warning: Failed to parse config.yaml: %v", err)
 		}
 	}
 
-	configInstance = &Config{}
-	if err := viper.Unmarshal(configInstance); err != nil {
-		return fmt.Errorf("unable to decode config into struct: %w", err)
-	}
+	// Override with environment variables
+	cfg.Server.Port = getEnvOrDefault("SERVER_PORT", cfg.Server.Port)
+	cfg.Database.Host = getEnvOrDefault("DB_HOST", cfg.Database.Host)
+	cfg.Database.Port = getEnvOrDefault("DB_PORT", cfg.Database.Port)
+	cfg.Database.User = getEnvOrDefault("DB_USER", cfg.Database.User)
+	cfg.Database.Password = getEnvOrDefault("DB_PASSWORD", cfg.Database.Password)
+	cfg.Database.DbName = getEnvOrDefault("DB_NAME", cfg.Database.DbName)
+	cfg.Database.SSLMode = getEnvOrDefault("DB_SSL_MODE", cfg.Database.SSLMode)
+	cfg.JWT.Secret = getEnvOrDefault("JWT_SECRET", cfg.JWT.Secret)
 
-	if err := validateConfig(configInstance); err != nil {
-		return fmt.Errorf("config validation failed: %w", err)
-	}
+	log.Printf("Loaded configuration - Database: %s@%s:%s/%s",
+		cfg.Database.User, cfg.Database.Host, cfg.Database.Port, cfg.Database.DbName)
 
-	configLoaded = true
-	return nil
+	return cfg, nil
 }
 
-// validateConfig validates the configuration values
-func validateConfig(cfg *Config) error {
-	if cfg.Database.Host == "" {
-		return fmt.Errorf("database host is required")
-	}
-	if cfg.Database.Port == "" {
-		return fmt.Errorf("database port is required")
-	}
-	if cfg.Database.User == "" {
-		return fmt.Errorf("database user is required")
-	}
-	if cfg.Database.Password == "" {
-		return fmt.Errorf("database password is required")
-	}
-	if cfg.Database.DbName == "" {
-		return fmt.Errorf("database name is required")
-	}
-	if cfg.Jwt.Secret == "" {
-		return fmt.Errorf("jwt secret is required")
-	}
-	if cfg.Server.Port == "" {
-		return fmt.Errorf("server port is required")
-	}
-
-	return nil
-}
-
-// GetConfig returns the configuration instance
+// GetConfig returns the current configuration
 func GetConfig() *Config {
-	if !configLoaded {
-		if err := LoadConfig(); err != nil {
-			log.Fatalf("Failed to load config: %v", err)
-		}
+	return cfg
+}
+
+func getEnvOrDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
 	}
-	return configInstance
+	return defaultValue
 }
 
 // GetDSN returns the database connection string

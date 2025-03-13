@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"product-tracker/config"
 	"product-tracker/db"
+	"product-tracker/models"
 
 	_ "github.com/lib/pq"
 )
@@ -24,91 +25,111 @@ type Product struct {
 	Date           string  `json:"date" validate:"required,datetime=2006-01-02"`
 }
 
-// Storage handles database operations for products
+// Storage represents the database storage layer
 type Storage struct {
-	db *db.DB
+	db *sql.DB
 }
 
-// NewStorage creates a new storage instance with a database connection
-func NewStorage() (*Storage, error) {
-	cfg := config.GetConfig()
-	dbConn, err := db.NewDB(cfg.GetDSN(), cfg.Database.MaxConns, cfg.Database.MaxIdle, cfg.Database.Timeout)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to the database: %w", err)
+// NewStorage creates a new storage instance
+func NewStorage(cfg *config.Config) (*Storage, error) {
+	dbConfig := &db.DBConfig{
+		Host:     cfg.Database.Host,
+		Port:     cfg.Database.Port,
+		User:     cfg.Database.User,
+		Password: cfg.Database.Password,
+		DbName:   cfg.Database.DbName,
 	}
-	return &Storage{db: dbConn}, nil
+
+	if err := db.ValidateConfig(dbConfig); err != nil {
+		return nil, fmt.Errorf("invalid database configuration: %v", err)
+	}
+
+	database, err := db.NewDB(dbConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to database: %v", err)
+	}
+
+	return &Storage{db: database}, nil
 }
 
 // Close closes the database connection
 func (s *Storage) Close() error {
-	if s.db == nil {
-		return nil
+	if s.db != nil {
+		return s.db.Close()
 	}
-	return s.db.Close()
-}
-
-// InsertProduct inserts a new product into the database
-func (s *Storage) InsertProduct(ctx context.Context, p Product) error {
-	query := fmt.Sprintf("INSERT INTO %s (%s) VALUES ($1, $2, $3, $4)", tableName, columns)
-
-	result, err := s.db.ExecContext(ctx, query, p.Name, p.Quantity, p.EnergyConsumed, p.Date)
-	if err != nil {
-		return fmt.Errorf("failed to insert product: %w", err)
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
-	}
-
-	if rowsAffected == 0 {
-		return db.ErrDBNoRowsEffected
-	}
-
 	return nil
 }
 
-// GetProductsByName retrieves products by their name
-func (s *Storage) GetProductsByName(ctx context.Context, name string) ([]Product, error) {
-	query := fmt.Sprintf("SELECT %s FROM %s WHERE name = $1", columns, tableName)
+// InsertProduct inserts a new product into the database
+func (s *Storage) InsertProduct(ctx context.Context, product *models.Product) error {
+	query := `
+		INSERT INTO products (name, description, price, energy_consumption)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id, created_at, updated_at`
 
-	rows, err := s.db.QueryContext(ctx, query, name)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query products: %w", err)
-	}
-	defer rows.Close()
-
-	return scanProducts(rows)
+	return s.db.QueryRowContext(ctx, query,
+		product.Name,
+		product.Description,
+		product.Price,
+		product.EnergyConsumption,
+	).Scan(&product.ID, &product.CreatedAt, &product.UpdatedAt)
 }
 
 // GetProducts retrieves all products from the database
-func (s *Storage) GetProducts(ctx context.Context) ([]Product, error) {
-	query := fmt.Sprintf("SELECT %s FROM %s", columns, tableName)
+func (s *Storage) GetProducts(ctx context.Context) ([]models.Product, error) {
+	query := `
+		SELECT id, name, description, price, energy_consumption, created_at, updated_at
+		FROM products
+		ORDER BY created_at DESC`
 
 	rows, err := s.db.QueryContext(ctx, query)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query products: %w", err)
+		return nil, fmt.Errorf("failed to query products: %v", err)
 	}
 	defer rows.Close()
 
-	return scanProducts(rows)
+	return s.scanProducts(rows)
+}
+
+// GetProductsByName retrieves products by name from the database
+func (s *Storage) GetProductsByName(ctx context.Context, name string) ([]models.Product, error) {
+	query := `
+		SELECT id, name, description, price, energy_consumption, created_at, updated_at
+		FROM products
+		WHERE name ILIKE $1
+		ORDER BY created_at DESC`
+
+	rows, err := s.db.QueryContext(ctx, query, "%"+name+"%")
+	if err != nil {
+		return nil, fmt.Errorf("failed to query products by name: %v", err)
+	}
+	defer rows.Close()
+
+	return s.scanProducts(rows)
 }
 
 // scanProducts scans rows into Product structs
-func scanProducts(rows *sql.Rows) ([]Product, error) {
-	var products []Product
+func (s *Storage) scanProducts(rows *sql.Rows) ([]models.Product, error) {
+	var products []models.Product
 	for rows.Next() {
-		var p Product
-		if err := rows.Scan(&p.Name, &p.Quantity, &p.EnergyConsumed, &p.Date); err != nil {
-			return nil, fmt.Errorf("failed to scan product: %w", err)
+		var p models.Product
+		err := rows.Scan(
+			&p.ID,
+			&p.Name,
+			&p.Description,
+			&p.Price,
+			&p.EnergyConsumption,
+			&p.CreatedAt,
+			&p.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan product: %v", err)
 		}
 		products = append(products, p)
 	}
-
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating rows: %w", err)
+		return nil, fmt.Errorf("error iterating products: %v", err)
 	}
-
 	return products, nil
 }
 
@@ -146,7 +167,7 @@ func (s *Storage) InsertProducts(ctx context.Context, products []Product) error 
 }
 
 // GetProductsByDateRange retrieves products within a date range
-func (s *Storage) GetProductsByDateRange(ctx context.Context, startDate, endDate string) ([]Product, error) {
+func (s *Storage) GetProductsByDateRange(ctx context.Context, startDate, endDate string) ([]models.Product, error) {
 	query := fmt.Sprintf("SELECT %s FROM %s WHERE date BETWEEN $1 AND $2 ORDER BY date", columns, tableName)
 
 	rows, err := s.db.QueryContext(ctx, query, startDate, endDate)
@@ -155,7 +176,7 @@ func (s *Storage) GetProductsByDateRange(ctx context.Context, startDate, endDate
 	}
 	defer rows.Close()
 
-	return scanProducts(rows)
+	return s.scanProducts(rows)
 }
 
 // GetProductStats retrieves statistics about products

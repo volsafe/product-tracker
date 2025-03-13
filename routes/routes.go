@@ -81,3 +81,21 @@ func SetupRouter() *gin.Engine {
 
 	return r
 }
+
+// SetupRoutes configures all the routes for the application
+func SetupRoutes(router *gin.Engine) {
+	// Health check route
+	router.GET("/health", handlers.HealthCheck)
+
+	// API v1 group
+	v1 := router.Group("/api/v1")
+	{
+		// Product routes
+		product := v1.Group("/product")
+		{
+			product.POST("/insert", middlewares.AuthMiddleware(), handlers.ImportProduct)
+			product.GET("/list", middlewares.AuthMiddleware(), handlers.GetProducts)
+			product.GET("/list/:name", middlewares.AuthMiddleware(), handlers.GetProductsByName)
+		}
+	}
+}

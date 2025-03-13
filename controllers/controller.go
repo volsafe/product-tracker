@@ -1,12 +1,10 @@
 package controllers
 
-
 import (
 	"context"
+	"product-tracker/models"
 	"product-tracker/storage"
-
 )
-
 
 var S *storage.Storage
 
@@ -14,21 +12,19 @@ func SetStorageInstance(storageInstance *storage.Storage) {
 	S = storageInstance
 }
 
-
 type Product struct {
-	Name  string `json:"name"`
-	Quantity int `json:"quantity"`
-	EnergyConsumed float64 `json:"energy_consumed"`
-	Date string `json:"date"`
+	Name              string  `json:"name"`
+	Description       string  `json:"description"`
+	Price             float64 `json:"price"`
+	EnergyConsumption float64 `json:"energy_consumption"`
 }
 
-
 func InsertProduct(c context.Context, p Product) error {
-	err := S.InsertProduct(c, storage.Product{
-		Name: p.Name,
-		Quantity: p.Quantity,
-		EnergyConsumed: p.EnergyConsumed,
-		Date: p.Date,
+	err := S.InsertProduct(c, &models.Product{
+		Name:              p.Name,
+		Description:       p.Description,
+		Price:             p.Price,
+		EnergyConsumption: p.EnergyConsumption,
 	})
 	if err != nil {
 		return err
@@ -44,10 +40,10 @@ func GetProductsByName(c context.Context, name string) ([]Product, error) {
 	var p []Product
 	for _, product := range products {
 		p = append(p, Product{
-			Name: product.Name,
-			Quantity: product.Quantity,
-			EnergyConsumed: product.EnergyConsumed,
-			Date: product.Date,
+			Name:              product.Name,
+			Description:       product.Description,
+			Price:             product.Price,
+			EnergyConsumption: product.EnergyConsumption,
 		})
 	}
 	return p, nil
@@ -61,10 +57,10 @@ func GetProducts(c context.Context) ([]Product, error) {
 	var p []Product
 	for _, product := range products {
 		p = append(p, Product{
-			Name: product.Name,
-			Quantity: product.Quantity,
-			EnergyConsumed: product.EnergyConsumed,
-			Date: product.Date,
+			Name:              product.Name,
+			Description:       product.Description,
+			Price:             product.Price,
+			EnergyConsumption: product.EnergyConsumption,
 		})
 	}
 	return p, nil

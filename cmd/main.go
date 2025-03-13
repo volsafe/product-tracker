@@ -1,21 +1,17 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
 	"product-tracker/config"
 	"product-tracker/routes"
-	"product-tracker/storage"
 
 	_ "product-tracker/docs" // Import swagger docs
 
+	"github.com/gin-gonic/gin"
 	_ "github.com/lib/pq"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
@@ -41,60 +37,77 @@ import (
 // @name Authorization
 // @description Type "Bearer" followed by a space and JWT token.
 
-func main() {
-	// Initialize logger
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
+// Server represents the HTTP server
+type Server struct {
+	router *gin.Engine
+	config *config.Config
+}
 
-	// Load configuration
-	if err := config.LoadConfig(); err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
+// NewServer creates a new HTTP server
+func NewServer(router *gin.Engine, cfg *config.Config) *Server {
+	return &Server{
+		router: router,
+		config: cfg,
 	}
-	cfg := config.GetConfig()
+}
 
-	// Initialize storage
-	storageInstance, err := storage.NewStorage()
-	if err != nil {
-		log.Fatalf("Failed to initialize storage: %v", err)
-	}
-	defer storageInstance.Close()
+// NewRouter creates a new Gin router
+func NewRouter(cfg *config.Config) *gin.Engine {
+	// Set gin mode
+	gin.SetMode(gin.DebugMode)
 
-	// Initialize router
-	router := routes.SetupRouter()
+	// Create router
+	router := gin.New()
+
+	// Add middleware
+	router.Use(gin.Recovery())
+	router.Use(gin.Logger())
 
 	// Swagger documentation
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
-	// Create server with timeouts
+	// Setup routes
+	routes.SetupRoutes(router)
+
+	return router
+}
+
+func main() {
+	// Initialize logger
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	log.Println("📝 Starting Product Tracker API...")
+
+	// Load configuration
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		log.Fatalf("❌ Failed to load config: %v", err)
+	}
+
+	// Create router
+	router := NewRouter(cfg)
+
+	// Create server
+	server := NewServer(router, cfg)
+
+	// Create server address
+	addr := fmt.Sprintf(":%s", cfg.Server.Port)
+	serverURL := fmt.Sprintf("http://localhost%s", addr)
+
+	// Create HTTP server
 	srv := &http.Server{
-		Addr:           fmt.Sprintf(":%s", cfg.Server.Port),
-		Handler:        router,
-		ReadTimeout:    cfg.Server.ReadTimeout,
-		WriteTimeout:   cfg.Server.WriteTimeout,
-		IdleTimeout:    cfg.Server.IdleTimeout,
-		MaxHeaderBytes: cfg.Server.MaxHeaderBytes,
+		Addr:           addr,
+		Handler:        server.router,
+		ReadTimeout:    10 * time.Second,
+		WriteTimeout:   10 * time.Second,
+		IdleTimeout:    120 * time.Second,
+		MaxHeaderBytes: 1 << 20, // 1MB
 	}
 
-	// Start server in a goroutine
-	go func() {
-		log.Printf("Starting server on port %s", cfg.Server.Port)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Failed to start server: %v", err)
-		}
-	}()
+	log.Printf("🚀 Starting server on %s", serverURL)
+	log.Printf("📚 Swagger documentation available at %s/swagger/index.html", serverURL)
 
-	// Wait for interrupt signal
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-
-	// Graceful shutdown
-	log.Println("Shutting down server...")
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatalf("Server forced to shutdown: %v", err)
+	// Start server
+	if err := srv.ListenAndServe(); err != nil {
+		log.Fatalf("❌ Failed to start server: %v", err)
 	}
-
-	log.Println("Server exiting")
 }

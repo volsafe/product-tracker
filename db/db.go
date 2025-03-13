@@ -19,14 +19,33 @@ var (
 	ErrInvalidConfig    = errors.New("invalid database configuration")
 )
 
-// DBConfig holds database configuration
+// DBConfig represents the database configuration
 type DBConfig struct {
-	User     string
-	Password string
 	Host     string
 	Port     string
+	User     string
+	Password string
 	DbName   string
-	SSLMode  string
+}
+
+// ValidateConfig validates the database configuration
+func ValidateConfig(cfg *DBConfig) error {
+	if cfg.Host == "" {
+		return fmt.Errorf("database host is required")
+	}
+	if cfg.Port == "" {
+		return fmt.Errorf("database port is required")
+	}
+	if cfg.User == "" {
+		return fmt.Errorf("database user is required")
+	}
+	if cfg.Password == "" {
+		return fmt.Errorf("database password is required")
+	}
+	if cfg.DbName == "" {
+		return fmt.Errorf("database name is required")
+	}
+	return nil
 }
 
 // DB wraps sql.DB with additional functionality
@@ -34,38 +53,27 @@ type DB struct {
 	*sql.DB
 }
 
-// NewDB creates a new database connection with the given parameters
-func NewDB(dsn string, maxConns, maxIdle int, timeout time.Duration) (*DB, error) {
+// NewDB creates a new database connection
+func NewDB(cfg *DBConfig) (*sql.DB, error) {
+	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.DbName)
+
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open database: %w", err)
+		return nil, fmt.Errorf("failed to open database connection: %v", err)
 	}
 
 	// Set connection pool settings
-	db.SetMaxOpenConns(maxConns)
-	db.SetMaxIdleConns(maxIdle)
-	db.SetConnMaxLifetime(timeout)
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(5 * time.Minute)
 
 	// Test the connection
 	if err := db.Ping(); err != nil {
-		return nil, fmt.Errorf("failed to ping database: %w", err)
+		return nil, fmt.Errorf("failed to ping database: %v", err)
 	}
 
-	return &DB{db}, nil
-}
-
-// validateConfig checks if the database configuration is valid
-func validateConfig(c struct {
-	Host     string `json:"host"`
-	Port     string `json:"port"`
-	User     string `json:"user"`
-	Password string `json:"password"`
-	DbName   string `json:"dbname"`
-}) error {
-	if c.User == "" || c.Password == "" || c.Host == "" || c.Port == "" || c.DbName == "" {
-		return ErrInvalidConfig
-	}
-	return nil
+	return db, nil
 }
 
 // Close closes the database connection

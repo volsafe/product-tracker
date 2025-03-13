@@ -3,10 +3,12 @@ package controllers
 import (
 	"context"
 	"product-tracker/db"
+	"product-tracker/config"
 )
 
 func HealthCheck(c context.Context) error {
-    dbConn, err := db.NewDB()
+    cfg := config.GetConfig()
+    dbConn, err := db.NewDB(cfg.GetDSN(), cfg.Database.MaxConns, cfg.Database.MaxIdle, cfg.Database.Timeout)
     if err != nil {
         return err
     }
